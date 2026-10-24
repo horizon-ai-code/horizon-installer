@@ -1,0 +1,290 @@
+HORIZON AI - BUILD FROM SOURCE
+==============================
+
+This guide builds Horizon AI locally from the GitHub repository. It does not
+use the prebuilt GHCR images and does not require Docker Compose.
+
+The repository's docker-compose files use prebuilt images. This guide builds
+local images and runs them directly with docker run.
+
+
+WHAT YOU NEED
+-------------
+
+- Git
+- Docker Engine or Docker Desktop running Linux containers
+- Internet access
+- At least 40 GB free disk space
+- 8 GB RAM minimum; 16 GB recommended
+- Optional GPU mode: NVIDIA GPU with 4 GB or more VRAM, an NVIDIA driver, and
+  Docker GPU support (NVIDIA Container Toolkit on Linux, WSL2 GPU support on
+  Windows)
+
+The models are about 8.1 GB and are not stored in Git. You download them
+separately.
+
+
+1. CLONE THE REPOSITORY
+-----------------------
+
+git clone https://github.com/horizon-ai-code/horizon.git
+cd horizon
+
+
+2. CHECK DOCKER
+---------------
+
+docker --version
+docker info
+
+Windows:
+  Docker Desktop must be using Linux containers, not Windows containers.
+
+Linux:
+  If Docker reports permission denied:
+    sudo usermod -aG docker $USER
+  Then log out and log back in.
+
+Optional GPU check:
+  nvidia-smi
+  docker info --format '{{json .Runtimes}}'
+
+
+3. DOWNLOAD THE MODELS
+----------------------
+
+Linux / macOS / WSL:
+
+  chmod +x backend/scripts/download_models.sh
+  ./backend/scripts/download_models.sh
+
+Or download them manually:
+
+  mkdir -p backend/models
+
+  wget -c -O backend/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf \
+    https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+
+  wget -c -O backend/models/qwen_coder.gguf \
+    https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf
+
+  wget -c -O backend/models/llama_engine.gguf \
+    https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+
+Windows PowerShell:
+
+  New-Item -ItemType Directory -Force backend\models | Out-Null
+
+  curl.exe -L -o backend\models\Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+
+  curl.exe -L -o backend\models\qwen_coder.gguf https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf
+
+  curl.exe -L -o backend\models\llama_engine.gguf https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+
+Verify the files:
+
+  Linux:   ls -lh backend/models
+  Windows: Get-ChildItem backend\models | Select-Object Name,Length
+
+Expected approximate sizes:
+
+  Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf   4.4 GB
+  qwen_coder.gguf                         1.8 GB
+  llama_engine.gguf                       1.9 GB
+
+Do not rename these files. The backend Dockerfile copies them into the image.
+
+
+4. BUILD THE BACKEND IMAGE
+--------------------------
+
+Build only the mode you need.
+
+GPU:
+
+  docker build -t horizon-backend:source-gpu -f backend/Dockerfile backend/
+
+CPU:
+
+  docker build -t horizon-backend:source-cpu -f backend/Dockerfile.cpu backend/
+
+Notes:
+
+- The GPU image uses the CUDA base image and compiles llama-cpp-python with
+  CUDA support. You do not need a GPU to build it, but the build takes longer.
+- The CPU image compiles llama-cpp-python for CPU.
+- The first build can take 15-45 minutes depending on CPU, disk, and network.
+- The backend build context includes backend/models, so the image contains the
+  models.
+- If you build both images, you will use significantly more disk space.
+
+
+5. BUILD THE FRONTEND IMAGE
+---------------------------
+
+docker build -t horizon-frontend:source --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 --build-arg NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws frontend/
+
+The frontend build uses Node 20 and npm ci. It usually takes a few minutes.
+
+This guide assumes the browser runs on the same machine as Docker. The frontend
+is built with http://localhost:8000 as the API address.
+
+
+6. RUN HORIZON AI
+-----------------
+
+If old Horizon containers exist, remove them first. This does not delete data:
+
+  docker rm -f horizon-backend horizon-frontend
+
+Create the Docker network and data volume if they do not exist:
+
+  docker network create horizon_default
+  docker volume create horizon_data
+
+If Docker says they already exist, continue.
+
+GPU backend:
+
+  docker run -d --name horizon-backend --restart unless-stopped --network horizon_default -p 8000:8000 -v horizon_data:/app/db --gpus all horizon-backend:source-gpu
+
+CPU backend:
+
+  docker run -d --name horizon-backend --restart unless-stopped --network horizon_default -p 8000:8000 -v horizon_data:/app/db horizon-backend:source-cpu
+
+Frontend:
+
+  docker run -d --name horizon-frontend --restart unless-stopped --network horizon_default -p 3000:3000 horizon-frontend:source
+
+If you already have a Horizon data volume, list it and use that name instead of
+horizon_data:
+
+  docker volume ls
+
+
+7. VERIFY
+---------
+
+docker ps
+docker logs -f horizon-backend
+docker logs -f horizon-frontend
+
+API health:
+
+  curl http://localhost:8000/health
+
+Open:
+
+  http://localhost:3000
+
+The first CPU start can take a while because the models are loaded locally.
+
+
+8. UPDATE AND REBUILD
+---------------------
+
+git pull
+./backend/scripts/download_models.sh
+
+Rebuild the backend image for your mode and the frontend image using the same
+docker build commands above.
+
+Then recreate the containers:
+
+  docker rm -f horizon-backend horizon-frontend
+  docker run ... (same commands as step 6)
+
+The horizon_data volume is preserved.
+
+For a clean rebuild:
+
+  docker build --no-cache ...
+
+Free Docker build cache if disk space is low:
+
+  docker system df
+  docker builder prune
+
+
+9. STOP, START, REMOVE
+----------------------
+
+Stop:
+
+  docker stop horizon-frontend horizon-backend
+
+Start again:
+
+  docker start horizon-backend horizon-frontend
+
+Remove containers but keep data:
+
+  docker rm horizon-frontend horizon-backend
+
+Remove the data volume permanently:
+
+  docker volume rm horizon_data
+
+Remove the local images:
+
+  docker rmi horizon-backend:source-gpu horizon-backend:source-cpu horizon-frontend:source
+
+
+10. TROUBLESHOOTING
+-------------------
+
+"Docker is not installed"
+  Install Docker Engine or Docker Desktop.
+
+"Docker is installed but not running"
+  Start Docker Desktop or the Docker daemon.
+
+"Docker Desktop is using Windows containers"
+  Switch Docker Desktop to Linux containers.
+
+"Docker permission denied" on Linux
+  Add your user to the docker group and log out/in.
+
+"COPY models/ ... not found" during docker build
+  Download the models into backend/models before building.
+
+Model download fails
+  Check the internet connection and free disk space. Use wget -c or curl.exe -L
+  to resume/retry.
+
+Build fails with "no space left on device"
+  Free at least 40 GB and run:
+
+    docker system df
+    docker builder prune
+
+GPU build fails
+  Use the CPU Dockerfile instead, or ensure Docker has enough memory and
+  internet access to pull the CUDA base image.
+
+Frontend build fails at npm ci
+  Check the internet connection and that frontend/package-lock.json exists.
+
+docker run --gpus all fails
+  Verify nvidia-smi works on the host, install the NVIDIA Container Toolkit on
+  Linux, or enable WSL2 GPU support in Docker Desktop on Windows.
+
+Port 3000 or 8000 already in use
+  Stop the program using that port, then run the container again.
+
+Container name already in use
+  docker rm -f horizon-backend horizon-frontend
+
+API is not healthy yet
+  Check the backend logs. Model loading can take time on CPU.
+
+
+NOTES
+-----
+
+- No prebuilt images are used.
+- No Docker Compose is required.
+- No source code archive is provided; clone the repository from GitHub.
+- Models and the local database are not committed to Git.
+- The database is stored in the Docker volume horizon_data.
+- Horizon AI runs locally; source code and session data stay on the machine.

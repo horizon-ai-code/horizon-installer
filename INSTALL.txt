@@ -1,0 +1,196 @@
+HORIZON AI - INSTALLATION INSTRUCTIONS
+======================================
+
+This disc contains the Horizon AI interactive installer for Windows and Linux.
+You do not need the source code, a docker-compose file, or Docker Compose.
+
+To build Horizon AI from source instead of using the prebuilt images, see
+BUILD-FROM-SOURCE.txt.
+
+
+QUICK START
+-----------
+
+Windows:
+  1. Open the "windows" folder.
+  2. Double-click "install.cmd".
+  3. Follow the Horizon AI setup screen.
+  4. Open http://localhost:3000 when installation finishes.
+
+Linux:
+  1. Open a terminal in the "linux" folder.
+  2. Run: bash install.sh
+  3. Follow the Horizon AI setup screen.
+  4. Open http://localhost:3000 when installation finishes.
+
+
+REQUIREMENTS
+------------
+
+- Docker must already be installed and running.
+  Windows: Docker Desktop using Linux containers.
+  Linux: Docker Engine, and your user must be allowed to run Docker.
+- Internet access is required for the first installation. The installer pulls
+  the prebuilt Horizon AI images from GitHub Container Registry (GHCR).
+- Several GB of free disk space for the images and the local database.
+- Optional GPU mode: NVIDIA GPU with at least 4 GB of VRAM and Docker GPU
+  support (NVIDIA Container Toolkit on Linux, WSL2 GPU support on Windows).
+
+Docker Compose is not required.
+
+
+WINDOWS
+-------
+
+1. Insert the disc and open the "windows" folder.
+2. Double-click "install.cmd".
+3. If Windows asks for permission, allow it.
+4. The installer checks Docker, detects the GPU, and recommends a mode.
+5. Choose GPU or CPU, confirm, and wait for the images to download and start.
+6. Open http://localhost:3000 in your browser.
+
+If double-clicking does not work, open PowerShell in the "windows" folder and
+run:
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+
+
+LINUX
+-----
+
+1. Insert the disc and open a terminal in the "linux" folder.
+2. Run:
+
+  bash install.sh
+
+3. The installer checks Docker, detects the GPU, and recommends a mode.
+4. Choose GPU or CPU, confirm, and wait for the images to download and start.
+5. Open http://localhost:3000 in your browser.
+
+If Docker reports a permission error, add your user to the docker group:
+
+  sudo usermod -aG docker $USER
+
+Then log out and log back in, and run the installer again.
+
+
+WHAT THE INSTALLER DOES
+-----------------------
+
+- Verifies Docker is installed, running, and using Linux containers.
+- Detects NVIDIA GPUs and VRAM.
+- Recommends GPU mode when the GPU has at least 4 GB VRAM and Docker GPU
+  support is available.
+- Pulls the prebuilt Horizon AI backend and frontend images from GHCR.
+- Creates the Docker network "horizon_default".
+- Creates or reuses the Docker data volume "horizon_data".
+- Starts the backend and frontend containers.
+- Waits for the API and UI health checks.
+- Opens the Horizon AI studio in your browser.
+
+Existing Horizon AI containers are recreated during an update. The data volume
+is preserved.
+
+
+MODES
+-----
+
+GPU:
+  Faster local inference. Requires an NVIDIA GPU with 4 GB or more VRAM and
+  working Docker GPU support.
+
+CPU:
+  Works on any machine. Slower for large refactors, but needs no NVIDIA GPU.
+
+The installer automatically recommends CPU mode if GPU support is missing.
+
+
+USEFUL COMMANDS
+---------------
+
+View backend logs:
+  docker logs -f horizon-backend
+
+View frontend logs:
+  docker logs -f horizon-frontend
+
+Stop Horizon AI:
+  docker stop horizon-frontend horizon-backend
+
+Start Horizon AI again:
+  docker start horizon-backend horizon-frontend
+
+Remove the containers but keep the database:
+  docker rm horizon-frontend horizon-backend
+
+Remove the database permanently:
+  docker volume rm horizon_data
+  (If the installer reused an existing Horizon volume, use that volume name.
+   List volumes with: docker volume ls)
+
+
+DATA AND LOGS
+-------------
+
+The database is stored in the Docker volume "horizon_data". If an existing
+Horizon volume such as "horizon_horizon_data" is found, the installer reuses it.
+Reinstalling or updating does not delete this volume.
+
+Installer logs:
+  Linux:   ~/.config/horizon/install.log
+  Windows: %LOCALAPPDATA%\Horizon\install.log
+
+
+TROUBLESHOOTING
+---------------
+
+"Docker is not installed"
+  Install Docker Engine or Docker Desktop first, then run the installer again.
+
+"Docker is installed but not running"
+  Start Docker Desktop or the Docker daemon, then re-check.
+
+"Docker Desktop is using Windows containers"
+  Open Docker Desktop settings and switch to Linux containers.
+
+"Docker permission denied" on Linux
+  Add your user to the docker group, then log out and back in.
+
+"NVIDIA Container Toolkit is required"
+  Install the NVIDIA Container Toolkit and restart Docker, or choose CPU mode.
+
+"GPU is below the 4096 MB minimum"
+  Choose CPU mode. GPU mode can only be forced with the advanced option.
+
+"Port already in use"
+  Stop the program using port 3000 or 8000, then retry the installation.
+
+"Could not pull the prebuilt images"
+  Check the internet connection, then retry. The first installation needs to
+  download the images from GHCR.
+
+"Containers were recreated"
+  This is expected during an update. The database volume is preserved.
+
+
+ADVANCED OPTIONS
+----------------
+
+Linux:
+  bash install.sh --help
+  bash install.sh --mode cpu --yes
+  bash install.sh --dry-run
+
+Windows:
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Help
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Mode Cpu -Yes
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DryRun
+
+
+SUPPORT
+-------
+
+Project repository:
+  https://github.com/horizon-ai-code/horizon
+
+Horizon AI runs locally. Your source code and session data stay on this machine.
